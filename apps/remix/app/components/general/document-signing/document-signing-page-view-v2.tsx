@@ -219,15 +219,6 @@ export const DocumentSigningPageViewV2 = () => {
 
             <div className="embed--DocumentWidgetFooter mt-auto">
               {/* Footer of left sidebar. */}
-              {!isEmbed && (
-                <div className="px-4">
-                  <Button asChild variant="ghost" className="w-full justify-start">
-                    <a href="https://github.com/taeganw/everydaymetrix-documenso" target="_blank" rel="noopener noreferrer">
-                      Source code
-                    </a>
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
         </div>

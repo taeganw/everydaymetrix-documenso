@@ -7,10 +7,12 @@ AGPL-3.0. The full license is in [LICENSE](LICENSE). Upstream copyright notices 
 - **Base:** upstream tag `v2.17.0` (`https://github.com/documenso/documenso/tree/v2.17.0`).
 - **Our change:** one source edit in
   [`document-signing-page-view-v2.tsx`](apps/remix/app/components/general/document-signing/document-signing-page-view-v2.tsx).
-  The signing page sidebar's "Return" link (to `/`) is replaced by a "Source code" link to this repository.
+  The signing page sidebar's "Return" link (to `/`) is removed.
 - **How it is deployed:** we run the unmodified `documenso/documenso:v2.17.0` container image and apply the same
   edit to its compiled output at start-up with [`everydaymetrix/remove-return-button.mjs`](everydaymetrix/remove-return-button.mjs).
   Other customization (logo, colors, company details) uses Documenso's own Branding settings, not code changes.
+  The favicons and web manifest are replaced with our own files mounted over the stock ones; they are not part of
+  this source tree.
 
 ## What is not in this repository
 
