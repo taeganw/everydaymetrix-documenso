@@ -24,10 +24,11 @@ const PATTERN =
 const PATCHED =
   /embed--DocumentWidgetFooter mt-auto",\s*children:\s*(?:false|!1)\s*&&/;
 
-// Client chunks are cached for a year under their hashed name (Cloudflare and browsers), so a
-// patched chunk keeps serving its stock copy to anyone who loaded it before. Rename each patched
-// client chunk, and every reference to it, so the patched copy has a name nobody has cached.
-// Bump REV whenever the patch changes.
+// Client chunks are cached for a year under their hashed name (Cloudflare edges and browsers), so
+// a patched chunk keeps serving its stock copy to anyone who loaded it before, and so do the chunks
+// that import it. Rename each patched client chunk and, transitively, every client chunk that
+// references a renamed one, then rewrite all references (server bundle included, which is not
+// cached and is where the HTML gets its entry names). Bump REV whenever the patch changes.
 const REV = "em1";
 
 function walk(dir) {
@@ -37,22 +38,40 @@ function walk(dir) {
   });
 }
 
-function renameChunk(file) {
-  const oldBase = file.slice(file.lastIndexOf("/") + 1);
-  const newBase = oldBase.replace(/\.js$/, `-${REV}.js`);
-  let refs = 0;
-  for (const other of walk(BUILD)) {
-    if (!/\.(js|mjs|json|html)$/.test(other) || other === file) continue;
-    const text = readFileSync(other, "utf8");
-    if (!text.includes(oldBase)) continue;
-    writeFileSync(other, text.split(oldBase).join(newBase));
-    refs += 1;
+const baseOf = (file) => file.slice(file.lastIndexOf("/") + 1);
+
+function renameClosure(roots) {
+  const clientAssets = join(BUILD, "client/assets");
+  const renamed = new Map(); // old basename -> new basename
+  const queue = [...roots];
+  const texts = new Map(); // path -> text, for files rewritten in this pass
+  const files = walk(BUILD).filter((f) => /\.(js|mjs|json|html)$/.test(f));
+  for (const f of files) texts.set(f, readFileSync(f, "utf8"));
+
+  while (queue.length > 0) {
+    const file = queue.shift();
+    const oldBase = baseOf(file);
+    if (renamed.has(oldBase)) continue;
+    const newBase = oldBase.replace(/\.js$/, `-${REV}.js`);
+    renamed.set(oldBase, newBase);
+    for (const [other, text] of texts) {
+      if (!text.includes(oldBase)) continue;
+      texts.set(other, text.split(oldBase).join(newBase));
+      if (other.startsWith(clientAssets) && !renamed.has(baseOf(other))) {
+        queue.push(other);
+      }
+    }
   }
-  if (refs === 0) {
-    console.error(`remove-return-button: nothing references ${oldBase}`);
-    process.exit(1);
+
+  for (const [path, text] of texts) writeFileSync(path, text);
+  // Files were rewritten under their old paths; now move the renamed ones.
+  for (const [oldBase, newBase] of renamed) {
+    renameSync(
+      join(BUILD, "client/assets", oldBase),
+      join(BUILD, "client/assets", newBase),
+    );
   }
-  renameSync(file, file.replace(oldBase, newBase));
+  return renamed.size;
 }
 
 let patched = 0;
@@ -75,7 +94,7 @@ for (const dir of ["server/assets", "client/assets"]) {
   }
 }
 
-for (const file of renames) renameChunk(file);
+const renamedCount = renames.length > 0 ? renameClosure(renames) : 0;
 
 // Expect the server bundle plus the signing-page client chunk.
 if (patched + already < 2) {
@@ -85,5 +104,5 @@ if (patched + already < 2) {
   process.exit(1);
 }
 console.log(
-  `remove-return-button: patched ${patched}, already patched ${already}`,
+  `remove-return-button: patched ${patched}, already patched ${already}, renamed ${renamedCount}`,
 );
