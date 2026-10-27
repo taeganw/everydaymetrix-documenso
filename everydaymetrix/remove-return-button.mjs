@@ -1,5 +1,6 @@
 // Removes the "Return" link (to "/") from the sidebar footer of the signing page. Clients only
-// ever open /sign/<token>, and "/" has no useful destination for them.
+// ever open /sign/<token>, and "/" has no useful destination for them. Also rebrands the tab title
+// suffix ("- Documenso") to "- Everyday Metrix".
 //
 // Patches the compiled bundle in place at pod start (see templates/deployment.yaml). The source
 // line is in documenso/documenso apps/remix/app/components/general/document-signing/
@@ -29,7 +30,7 @@ const PATCHED =
 // that import it. Rename each patched client chunk and, transitively, every client chunk that
 // references a renamed one, then rewrite all references (server bundle included, which is not
 // cached and is where the HTML gets its entry names). Bump REV whenever the patch changes.
-const REV = "em1";
+const REV = "em2";
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -74,9 +75,23 @@ function renameClosure(roots) {
   return renamed.size;
 }
 
+// The tab title comes from lingui catalogs ("Sign Document - Documenso", one entry per locale in
+// the server and client web-*.js chunks). Swap the brand suffix; client chunks get renamed below.
+const TITLE_BRAND = / - Documenso(?=\\?["'`])/g;
+
 let patched = 0;
 let already = 0;
+let titles = 0;
 const renames = [];
+for (const file of walk(BUILD)) {
+  if (!/\.m?js$/.test(file)) continue;
+  const src = readFileSync(file, "utf8");
+  if (!TITLE_BRAND.test(src)) continue;
+  TITLE_BRAND.lastIndex = 0;
+  writeFileSync(file, src.replace(TITLE_BRAND, " - Everyday Metrix"));
+  titles += 1;
+  if (file.startsWith(join(BUILD, "client/assets"))) renames.push(file);
+}
 for (const dir of ["server/assets", "client/assets"]) {
   for (const name of readdirSync(join(BUILD, dir))) {
     if (!name.endsWith(".js")) continue;
@@ -97,12 +112,12 @@ for (const dir of ["server/assets", "client/assets"]) {
 const renamedCount = renames.length > 0 ? renameClosure(renames) : 0;
 
 // Expect the server bundle plus the signing-page client chunk.
-if (patched + already < 2) {
+if (patched + already < 2 || titles === 0) {
   console.error(
-    `remove-return-button: expected at least 2 bundles, found ${patched + already}`,
+    `remove-return-button: expected at least 2 bundles, found ${patched + already}, title files ${titles}`,
   );
   process.exit(1);
 }
 console.log(
-  `remove-return-button: patched ${patched}, already patched ${already}, renamed ${renamedCount}`,
+  `remove-return-button: patched ${patched}, already patched ${already}, titles ${titles}, renamed ${renamedCount}`,
 );
